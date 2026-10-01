@@ -64,8 +64,8 @@ class ConfigurationError(RuntimeError):
     """A missing key or an invalid setting in the environment, reported without a traceback."""
 
 
-def _key(name: str) -> SecretStr | None:
-    return Field(default=None, validation_alias=AliasChoices(name))
+def _key(*names: str) -> SecretStr | None:
+    return Field(default=None, validation_alias=AliasChoices(*names))
 
 
 class Settings(BaseSettings):
@@ -81,8 +81,8 @@ class Settings(BaseSettings):
     jev_source: JevSource | None = None
     jev_base_url: str | None = None
     jev_model: str | None = None
-    llm_base_url: str | None = _key("LLM_BASE_URL")
-    llm_api_key: SecretStr | None = _key("LLM_API_KEY")
+    llm_base_url: str | None = _key("LLM_BASE_URL", "FASTBROWSE_LLM_BASE_URL")
+    llm_api_key: SecretStr | None = _key("LLM_API_KEY", "FASTBROWSE_LLM_API_KEY")
     llm_model: str | None = None
     llm_model_plan: str | None = None
     llm_model_read: str | None = None

@@ -179,6 +179,16 @@ class OpenAICompatibleLLM:
         self._models = dict(models)
         self._reasoning_effort = reasoning_effort
 
+    def _is_openrouter(self) -> bool:
+        return self._base_url.startswith("https://openrouter.ai/api") or self._base_url.startswith("http://openrouter.ai/api")
+
+    def _request_headers(self) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {self._api_key}"}
+        if self._is_openrouter():
+            headers["HTTP-Referer"] = "https://fastbrowse.ai"
+            headers["X-Title"] = "fastbrowse"
+        return headers
+
     def _scrubbed(self, text: str) -> str:
         return text.replace(self._api_key, "[api key]") if self._api_key else text
 
@@ -191,7 +201,7 @@ class OpenAICompatibleLLM:
                 self._http,
                 f"{self._base_url}/chat/completions",
                 body,
-                {"Authorization": f"Bearer {self._api_key}"},
+                self._request_headers(),
                 call=f"llm {body.get('model')}",
                 attempt_seconds=LLM_ATTEMPT_SECONDS,
                 hedge_seconds=LLM_HEDGE_SECONDS,
@@ -240,12 +250,13 @@ class OpenAICompatibleLLM:
                     "strict": True,
                 },
             },
+        }
+        if self._is_openrouter():
             # An endpoint that ignores response_format would treat the schema as a hint, so none is routed to.
             # OpenRouter's default routing sent gemini-3.8-flash reads to Vertex at a 2.4s median where AI Studio
             # answered the same read in 1.3s; sorting by latency keeps fallbacks and follows the faster endpoint.
-            "provider": {"require_parameters": True, "sort": "latency"},
-        }
-        if self._reasoning_effort is not None:
+            body["provider"] = {"require_parameters": True, "sort": "latency"}
+        if self._is_openrouter() and self._reasoning_effort is not None:
             body["reasoning"] = {"effort": self._reasoning_effort.value}
         costs: list[CostLine] = []
         started = monotonic()

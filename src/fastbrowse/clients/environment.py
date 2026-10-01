@@ -6,7 +6,8 @@ FASTBROWSE_JEV_SOURCE picks openrouter, typesafe or gateway explicitly. OpenRout
 gateway as backup; the gateway uses direct when configured, otherwise OpenRouter.
 FASTBROWSE_JEV_BASE_URL points either at a proxy or another host serving the same API, and
 FASTBROWSE_JEV_MODEL pins an OpenRouter or direct model. A custom endpoint or model disables automatic failover.
-LLM: OPENROUTER_API_KEY.
+LLM: OPENROUTER_API_KEY by default; FASTBROWSE_LLM_API_KEY and FASTBROWSE_LLM_BASE_URL override the key and
+base URL for the LLM only, leaving Jev untouched.
 Cloud browser: BROWSER_USE_API_KEY. FASTBROWSE_LLM_MODEL overrides every purpose at once, and
 FASTBROWSE_LLM_MODEL_<PURPOSE> (PLAN, READ, FIELD_TEXT, RECOVER, COMPOSE, VERIFY, SHORTCUT) overrides one.
 FASTBROWSE_LLM_REASONING sets the reasoning effort: low (default), medium or high. FASTBROWSE_CHROME
@@ -80,6 +81,8 @@ class Settings(BaseSettings):
     jev_source: JevSource | None = None
     jev_base_url: str | None = None
     jev_model: str | None = None
+    llm_base_url: str | None = _key("LLM_BASE_URL")
+    llm_api_key: SecretStr | None = _key("LLM_API_KEY")
     llm_model: str | None = None
     llm_model_plan: str | None = None
     llm_model_read: str | None = None
@@ -92,6 +95,16 @@ class Settings(BaseSettings):
     chrome: str | None = None
     headed: bool = False
     profile: Path | None = None
+
+    def llm_base(self) -> str:
+        return self.llm_base_url or "https://openrouter.ai/api/v1"
+
+    def llm_key(self) -> str:
+        if self.llm_api_key:
+            return self.llm_api_key.get_secret_value()
+        if not self.openrouter_api_key:
+            raise ConfigurationError("set OPENROUTER_API_KEY for the LLM")
+        return self.openrouter_api_key.get_secret_value()
 
     def models(self) -> dict[LLMPurpose, str]:
         """Per-purpose models, most specific setting winning."""
@@ -188,17 +201,15 @@ class Settings(BaseSettings):
 
     def llm(self, http: httpx.AsyncClient) -> LLMClient:
         return OpenAICompatibleLLM(
-            self.openrouter_key(),
+            self.llm_key(),
             http=http,
-            base_url="https://openrouter.ai/api/v1",
+            base_url=self.llm_base(),
             models=self.models(),
             reasoning_effort=self.llm_reasoning,
         )
 
     def openrouter_key(self) -> str:
-        if not self.openrouter_api_key:
-            raise ConfigurationError("set OPENROUTER_API_KEY for the LLM")
-        return self.openrouter_api_key.get_secret_value()
+        return self.llm_key()
 
     def browser_key(self) -> str:
         if not self.browser_use_api_key:
